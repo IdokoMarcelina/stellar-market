@@ -6,19 +6,20 @@ import { createServer } from "http";
 import { PrismaClient } from "@prisma/client";
 import { config } from "./config";
 import routes from "./routes";
-import {
-  globalRateLimiter,
-  writeRateLimiter,
-} from "./middleware/rate-limit";
+import { globalRateLimiter, writeRateLimiter } from "./middleware/rate-limit";
 import { sanitizeInput } from "./middleware/sanitize";
 import { errorHandler } from "./middleware/error";
 import { requestIdMiddleware } from "./middleware/request-id";
 import { initSocket } from "./socket";
 import { startExpiryJob } from "./jobs/expiry.job";
-import { startHorizonListener, stopHorizonListener } from "./services/horizon-listener.service";
+import {
+  startHorizonListener,
+  stopHorizonListener,
+} from "./services/horizon-listener.service";
 import { installRequestIdConsolePatch, logger } from "./lib/logger";
 import { getHealthStatus } from "./lib/health";
 import { RecommendationQueueService } from "./services/recommendation-queue.service";
+import { initializeVirusScanner } from "./utils/virusScanner";
 
 const app = express();
 import { swaggerUi, swaggerSpec } from "./config/swagger";
@@ -62,7 +63,10 @@ app.use(sanitizeInput);
 // Health check
 app.get("/health", async (_req, res) => {
   const health = await getHealthStatus(prisma);
-  res.status(health.status === "ok" ? 200 : 503).json(health);
+  const httpStatus = health.checks.database === "error" || health.checks.redis === "error"
+    ? 503
+    : 200;
+  res.status(httpStatus).json(health);
 });
 
 // Database-only health probe (used by some platforms/LB checks)
@@ -98,11 +102,14 @@ app.use((_req, res) => {
 app.use(errorHandler);
 
 function startServer(): void {
-  httpServer.listen(config.port, () => {
+  httpServer.listen(config.port, async () => {
     logger.info({ port: config.port }, "StellarMarket API running");
     startExpiryJob();
     startHorizonListener();
     RecommendationQueueService.startWorker();
+
+    // Initialize virus scanner (non-blocking)
+    await initializeVirusScanner();
   });
 }
 

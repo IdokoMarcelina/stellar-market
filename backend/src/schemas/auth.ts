@@ -4,18 +4,27 @@ import { emailSchema, passwordSchema, stellarAddressSchema } from "./common";
 export const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
-  stellarAddress: stellarAddressSchema,
+  stellarAddress: stellarAddressSchema.optional().nullable(),
   name: z
     .string()
     .min(2, "Name must be at least 2 characters long")
     .max(100, "Name must be less than 100 characters"),
   role: z.enum(["CLIENT", "FREELANCER"]).default("FREELANCER"),
+  referralCode: z.string().min(1).max(100).optional(),
 });
 
 export const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, "Password is required"),
 });
+
+export const walletAuthSchema = z.object({
+  publicKey: stellarAddressSchema,
+  message: z.string().min(1, "Signed message is required"),
+  signature: z.string().min(1, "Signature is required"),
+});
+
+export const walletLinkSchema = walletAuthSchema;
 
 export const updateStellarAddressSchema = z.object({
   stellarAddress: stellarAddressSchema,
